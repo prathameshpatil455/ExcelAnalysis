@@ -1,0 +1,98 @@
+# final script
+
+import pandas as pd
+import re
+
+# Load the Excel file
+file_path = '/content/Amarnath.xls'  # Update the file path as needed
+xls = pd.ExcelFile(file_path)
+
+# Initialize an empty list to store all rows
+all_rows = []
+
+# # Iterate through each sheet in the Excel file
+# for sheet_name in xls.sheet_names:
+#     df = pd.read_excel(xls, sheet_name=sheet_name, header=None)  # Read the sheet without header
+
+# Read the first sheet by name
+sheet_name = xls.sheet_names[0]  # Get the name of the first sheet
+df = pd.read_excel(xls, sheet_name=sheet_name, header=None)  # Read the first sheet without header
+
+# Initialize variables to store department and employee information
+department_name = None
+employee_id = None
+employee_name = None
+
+# Initialize a list to store the status columns and their indices
+status_columns = []
+status_indices = []
+
+# Process each row in the sheet
+for index, row in df.iterrows():
+    # Check if the row contains "Department:"
+    if row[0] == 'Department:':
+        department_name = row[4]  # Assuming department name is in the 5th column
+        continue
+
+    # Check if the row contains "Employee:"
+    if row[0] == 'Employee:':
+        ot_hours = None  # Initialize OT hours
+        # Assuming employee ID and name are in the 5th and 6th columns respectively
+        employee_info = row[4]
+        print(f"Employee info: {employee_info}")  # Debugging statement
+        if ':' in employee_info:
+            employee_id, employee_name = employee_info.split(':', 1)
+            employee_id = employee_id.strip()
+            employee_name = employee_name.strip()
+        # Extract Total OT hours from the specific cell (column I)
+        ot_cell_value = row[8]  # Assuming Total OT is in the 9th column (I)
+        ot_match = re.search(r'Total OT: (\d{2}:\d{2}) Hrs', str(ot_cell_value))
+        print(f"ot_match: {ot_match}")  # Debugging statement
+        ot_hours = ot_match.group(1) if ot_match else '00:00'
+        continue
+
+    # Check if the row contains "Days"
+    if row[0] == 'Days':
+        # Extract the status columns dynamically
+        status_columns = [col for col in row[1:] if pd.notna(col)]
+        status_indices = [i for i, col in enumerate(row[1:], start=1) if pd.notna(col)]
+        print(f"Status columns identified: {status_columns}")  # Debugging statement
+        continue
+
+    # If we have a department and employee, process the status row
+    if department_name and employee_id and employee_name and status_columns:
+        # Extract status for each day using the indices of the status columns
+        statuses = [row[i] for i in status_indices]
+
+        # Print the extracted statuses for debugging
+        print(f"Statuses for employee {employee_id}: {statuses}")
+
+        # Ensure the number of statuses matches the number of status columns
+        if len(statuses) != len(status_columns):
+            print(f"Warning: Mismatch in number of statuses for employee {employee_id}. Expected {len(status_columns)}, got {len(statuses)}.")
+            continue
+
+        # Calculate present and absent days
+        present_days = sum(status == 'P' for status in statuses)
+        absent_days = sum(status == 'A' for status in statuses)
+        total_days = present_days + absent_days
+
+
+        # Append the extracted data to the list with the correct order
+        all_rows.append([
+            department_name, employee_id, employee_name, *statuses, present_days, absent_days, ot_hours, total_days
+        ])
+
+        # Reset employee information for the next iteration
+        employee_id = None
+        employee_name = None
+
+# Create a DataFrame from the list of rows
+columns = ['Department', 'Employee ID', 'Employee Name'] + status_columns + ['Present Days', 'Absent Days', 'OT Hours', 'Total Days']
+structured_df = pd.DataFrame(all_rows, columns=columns)
+
+# Save the structured DataFrame to a new Excel file
+output_file_path = 'Structured_Data.xlsx'
+structured_df.to_excel(output_file_path, index=False)
+
+print(f"Structured DataFrame created and saved to '{output_file_path}'")
